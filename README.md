@@ -1,4 +1,4 @@
-# @kanmon/tollgate-ui
+# @kanmon-hq/tollgate-ui
 
 Tollgate API Gateway & Key Broker 向けの組み込み型 Web Components UI ライブラリ。  
 Vue 3、React、Next.js、Vanilla HTML などあらゆるフロントエンド環境に単一のカスタム要素として簡単に組み込み可能です。
@@ -12,12 +12,20 @@ Vue 3、React、Next.js、Vanilla HTML などあらゆるフロントエンド�
 
 ## インストール
 
+GitHub Packages (`@kanmon-hq` スコープ) からインストールします。プロジェクト直下の `.npmrc` に以下を設定してください：
+
+```ini
+@kanmon-hq:registry=https://npm.pkg.github.com
+```
+
+その後、パッケージをインストールします：
+
 ```bash
-npm install @kanmon/tollgate-ui
+npm install @kanmon-hq/tollgate-ui
 # または
-pnpm add @kanmon/tollgate-ui
+pnpm add @kanmon-hq/tollgate-ui
 # または
-yarn add @kanmon/tollgate-ui
+yarn add @kanmon-hq/tollgate-ui
 ```
 
 ## 使い方
@@ -29,7 +37,7 @@ yarn add @kanmon/tollgate-ui
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <script type="module" src="https://unpkg.com/@kanmon/tollgate-ui/dist/tollgate-ui.js"></script>
+  <script type="module" src="https://unpkg.com/@kanmon-hq/tollgate-ui/dist/tollgate-ui.js"></script>
 </head>
 <body class="bg-slate-950 p-8">
   <tollgate-console
@@ -45,9 +53,9 @@ yarn add @kanmon/tollgate-ui
 
 ```vue
 <script setup lang="ts">
-import '@kanmon/tollgate-ui'
+import '@kanmon-hq/tollgate-ui'
 // または
-// import { registerTollgateUI } from '@kanmon/tollgate-ui'
+// import { registerTollgateUI } from '@kanmon-hq/tollgate-ui'
 // registerTollgateUI()
 
 const tenants = [
@@ -76,7 +84,7 @@ import React, { useEffect } from 'react'
 
 export function TollgateAdminPage() {
   useEffect(() => {
-    import('@kanmon/tollgate-ui')
+    import('@kanmon-hq/tollgate-ui')
   }, [])
 
   const tenants = [
