@@ -12,13 +12,7 @@ Vue 3、React、Next.js、Vanilla HTML などあらゆるフロントエンド�
 
 ## インストール
 
-GitHub Packages (`@kanmon-hq` スコープ) からインストールします。プロジェクト直下の `.npmrc` に以下を設定してください：
-
-```ini
-@kanmon-hq:registry=https://npm.pkg.github.com
-```
-
-その後、パッケージをインストールします：
+### npm からインストール (推奨)
 
 ```bash
 npm install @kanmon-hq/tollgate-ui
@@ -26,6 +20,18 @@ npm install @kanmon-hq/tollgate-ui
 pnpm add @kanmon-hq/tollgate-ui
 # または
 yarn add @kanmon-hq/tollgate-ui
+```
+
+### GitHub Packages からインストール
+
+プロジェクト直下の `.npmrc` に以下を設定してインストールします：
+
+```ini
+@kanmon-hq:registry=https://npm.pkg.github.com
+```
+
+```bash
+npm install @kanmon-hq/tollgate-ui
 ```
 
 ## 使い方
