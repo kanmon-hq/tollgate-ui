@@ -1,0 +1,51 @@
+{
+  "name": "@kanmon/tollgate-ui",
+  "version": "0.1.0",
+  "description": "Web Components UI suite for Tollgate API Gateway & Key Broker",
+  "type": "module",
+  "main": "./dist/tollgate-ui.umd.cjs",
+  "module": "./dist/tollgate-ui.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/tollgate-ui.js",
+      "require": "./dist/tollgate-ui.umd.cjs"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "tollgate",
+    "web-components",
+    "vue",
+    "react",
+    "api-gateway",
+    "api-keys",
+    "ui"
+  ],
+  "author": "Kanmon HQ",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "lucide-vue-next": "^0.475.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.7.2",
+    "vite": "^6.1.0",
+    "vite-plugin-dts": "^4.5.0",
+    "vue-tsc": "^2.2.0"
+  }
+}
