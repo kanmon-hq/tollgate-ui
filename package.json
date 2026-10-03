@@ -1,6 +1,6 @@
 {
   "name": "@kanmon-hq/tollgate-ui",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Web Components UI suite for Tollgate API Gateway & Key Broker",
   "type": "module",
   "main": "./dist/tollgate-ui.umd.cjs",
