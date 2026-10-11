@@ -22,6 +22,23 @@ export default defineConfig({
       '@': resolve(__dirname, 'src')
     }
   },
+  server: {
+    port: 5173,
+    proxy: {
+      '/v1': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
+      },
+      '/livez': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
+      },
+      '/healthz': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
+      }
+    }
+  },
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
   },

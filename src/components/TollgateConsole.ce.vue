@@ -25,15 +25,27 @@ import {
   Layers,
   AlertCircle,
   ExternalLink,
-  Edit2
+  Edit2,
+  Settings,
+  Server,
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight,
+  X
 } from 'lucide-vue-next'
 import { TollgateApiClient } from '../api/client'
+import {
+  getDefaultApiBaseUrl,
+  getDefaultAdminToken,
+  getDefaultTenantsJson
+} from '../config'
 import type {
   TollgateKey,
   CreateKeyInput,
   UpdateKeyInput,
   TenantOption,
-  VerifyKeyResult
+  VerifyKeyResult,
+  KeyStats
 } from '../types'
 
 // Props 定義 (Web Component の attribute / property としてマッピングされる)
@@ -50,36 +62,167 @@ const props = withDefaults(
     apiBaseUrl: '',
     adminToken: '',
     tenantId: '',
-    tenantsJson: () => [],
     embedded: false,
     title: 'API Key Gateway (Tollgate) 管理コンソール'
   }
 )
 
+// デフォルト環境変数値
+const defaultEnvBaseUrl = computed(() => getDefaultApiBaseUrl())
+const defaultEnvAdminToken = computed(() => getDefaultAdminToken())
+
+// 初期値解決: localStorage > props > 環境変数
+const getInitialBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('tollgate_ui_api_base_url')
+    if (saved !== null && saved !== '') return saved
+  }
+  return props.apiBaseUrl || getDefaultApiBaseUrl()
+}
+
+const getInitialAdminToken = () => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('tollgate_ui_admin_token')
+    if (saved !== null && saved !== '') return saved
+  }
+  return props.adminToken || getDefaultAdminToken()
+}
+
+// 接続先 URL & 管理者トークン (UI から動的変更可能)
+const currentApiBaseUrl = ref<string>(getInitialBaseUrl())
+const currentAdminToken = ref<string>(getInitialAdminToken())
+
+const isCustomizedEndpoint = computed(() => {
+  if (typeof window === 'undefined') return false
+  return localStorage.getItem('tollgate_ui_api_base_url') !== null || localStorage.getItem('tollgate_ui_admin_token') !== null
+})
+
 // API クライアント
 const client = new TollgateApiClient({
-  baseUrl: props.apiBaseUrl,
-  adminToken: props.adminToken,
+  baseUrl: currentApiBaseUrl.value,
+  adminToken: currentAdminToken.value,
   tenantId: props.tenantId
 })
 
-watch(() => props.apiBaseUrl, (url) => client.setBaseUrl(url || ''))
-watch(() => props.adminToken, (tok) => client.setAdminToken(tok))
+watch(() => props.apiBaseUrl, (url) => {
+  if (typeof window !== 'undefined' && localStorage.getItem('tollgate_ui_api_base_url') === null) {
+    currentApiBaseUrl.value = url || getDefaultApiBaseUrl()
+    client.setBaseUrl(currentApiBaseUrl.value)
+  }
+})
+
+watch(() => props.adminToken, (tok) => {
+  if (typeof window !== 'undefined' && localStorage.getItem('tollgate_ui_admin_token') === null) {
+    currentAdminToken.value = tok || getDefaultAdminToken()
+    client.setAdminToken(currentAdminToken.value)
+  }
+})
+
 watch(() => props.tenantId, (tid) => client.setTenantId(tid))
 
-// テナントリストのパース
-const parsedTenants = computed<TenantOption[]>(() => {
-  if (Array.isArray(props.tenantsJson)) {
+// 設定モーダル状態
+const showSettingsModal = ref(false)
+const settingsForm = ref({
+  apiBaseUrl: '',
+  adminToken: ''
+})
+const testingConnection = ref(false)
+const testResult = ref<{ ok: boolean; message: string; service?: string } | null>(null)
+
+function openSettingsModal() {
+  settingsForm.value = {
+    apiBaseUrl: currentApiBaseUrl.value,
+    adminToken: currentAdminToken.value
+  }
+  testResult.value = null
+  showSettingsModal.value = true
+}
+
+async function runConnectionTest() {
+  testingConnection.value = true
+  testResult.value = null
+  const tempClient = new TollgateApiClient({
+    baseUrl: settingsForm.value.apiBaseUrl,
+    adminToken: settingsForm.value.adminToken,
+    tenantId: props.tenantId
+  })
+  try {
+    const health = await tempClient.checkHealth()
+    let msg = `接続成功: ${health.service || 'Tollgate'} (${health.status})`
+    if (settingsForm.value.adminToken) {
+      try {
+        await tempClient.fetchKeys(props.tenantId || (parsedTenants.value[0]?.id))
+        msg += ' — 管理者認証 OK'
+      } catch (authErr: any) {
+        msg += ` — 警告: 管理者認証エラー (${authErr.message})`
+      }
+    }
+    testResult.value = { ok: true, message: msg, service: health.service }
+  } catch (err: any) {
+    testResult.value = { ok: false, message: `接続失敗: ${err.message}` }
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+function saveSettings() {
+  currentApiBaseUrl.value = settingsForm.value.apiBaseUrl.trim()
+  currentAdminToken.value = settingsForm.value.adminToken.trim()
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('tollgate_ui_api_base_url', currentApiBaseUrl.value)
+    localStorage.setItem('tollgate_ui_admin_token', currentAdminToken.value)
+  }
+  client.setBaseUrl(currentApiBaseUrl.value)
+  client.setAdminToken(currentAdminToken.value)
+  showSettingsModal.value = false
+  refreshAll()
+}
+
+function resetSettings() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('tollgate_ui_api_base_url')
+    localStorage.removeItem('tollgate_ui_admin_token')
+  }
+  currentApiBaseUrl.value = props.apiBaseUrl || getDefaultApiBaseUrl()
+  currentAdminToken.value = props.adminToken || getDefaultAdminToken()
+  client.setBaseUrl(currentApiBaseUrl.value)
+  client.setAdminToken(currentAdminToken.value)
+  showSettingsModal.value = false
+  refreshAll()
+}
+
+// 明示的設定テナント (Props > 環境変数)
+const explicitTenants = computed<TenantOption[]>(() => {
+  if (Array.isArray(props.tenantsJson) && props.tenantsJson.length > 0) {
     return props.tenantsJson
   }
-  if (typeof props.tenantsJson === 'string' && props.tenantsJson.trim()) {
+  const jsonStr = (typeof props.tenantsJson === 'string' && props.tenantsJson.trim())
+    ? props.tenantsJson
+    : getDefaultTenantsJson()
+
+  if (jsonStr && jsonStr.trim()) {
     try {
-      return JSON.parse(props.tenantsJson)
+      const parsed = JSON.parse(jsonStr)
+      if (Array.isArray(parsed)) return parsed
     } catch {
       return []
     }
   }
   return []
+})
+
+// 表示用テナントリスト (明示的設定 + キーから自動検出)
+const parsedTenants = computed<TenantOption[]>(() => {
+  const map = new Map<string, string>()
+  for (const t of explicitTenants.value) {
+    map.set(t.id, t.name)
+  }
+  for (const k of keys.value) {
+    if (k.tenant_id && !map.has(k.tenant_id)) {
+      map.set(k.tenant_id, k.tenant_id)
+    }
+  }
+  return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
 })
 
 // 状態管理
@@ -88,9 +231,12 @@ const loading = ref(false)
 const errorMessage = ref<string | null>(null)
 const activeTab = ref<'keys' | 'system'>('keys')
 
-const searchQuery = ref('')
-const selectedStatusFilter = ref<string>('all')
-const selectedTenantFilter = ref<string>('all')
+// フィルター状態 (空文字または 'all' で全件)
+const selectedTenantFilter = ref<string>('')
+const selectedServiceFilter = ref<string>('')
+
+const dynamicServices = ref<string[]>([])
+const dynamicTenants = ref<string[]>([])
 
 // モーダル制御
 const showCreateModal = ref(false)
@@ -125,62 +271,105 @@ const verifyInputScope = ref('ai:*')
 const verifyResult = ref<VerifyKeyResult | null>(null)
 const isVerifying = ref(false)
 
-// フィルタ済みキー一覧
-const filteredKeys = computed(() => {
-  return keys.value.filter((key) => {
-    const q = searchQuery.value.toLowerCase()
-    const matchesSearch =
-      !q ||
-      key.name.toLowerCase().includes(q) ||
-      key.key_prefix.toLowerCase().includes(q) ||
-      (key.tenant_id ? key.tenant_id.toLowerCase().includes(q) : false) ||
-      (key.service_id ? key.service_id.toLowerCase().includes(q) : false)
-
-    const matchesStatus =
-      selectedStatusFilter.value === 'all' || key.status === selectedStatusFilter.value
-
-    const matchesTenant =
-      selectedTenantFilter.value === 'all' ||
-      (selectedTenantFilter.value === 'service_only'
-        ? !key.tenant_id
-        : key.tenant_id === selectedTenantFilter.value)
-
-    return matchesSearch && matchesStatus && matchesTenant
-  })
+// 利用可能なテナント一覧 (Props 設定値 + サーバー全体の確定実績値)
+const availableTenants = computed(() => {
+  const map = new Map<string, string>()
+  for (const t of parsedTenants.value) {
+    map.set(t.id, t.name)
+  }
+  for (const tid of dynamicTenants.value) {
+    if (!map.has(tid)) {
+      map.set(tid, tid)
+    }
+  }
+  return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
 })
 
-// メトリクス集計
-const activeKeysCount = computed(() => keys.value.filter((k) => k.status === 'active').length)
-const totalMonthlyUsage = computed(() =>
-  keys.value.reduce((sum, k) => sum + (k.current_month_usage || 0), 0)
-)
-const rotatingKeysCount = computed(() => keys.value.filter((k) => k.status === 'rotating').length)
+// 利用可能なサービス一覧 (サーバー全体の確定実績値)
+const availableServices = computed(() => {
+  const set = new Set<string>(dynamicServices.value)
+  for (const k of keys.value) {
+    if (k.service_id) set.add(k.service_id)
+  }
+  return Array.from(set).sort()
+})
+
+// フィルタ済みキー一覧 (サーバーサイドでインデックス絞り込み済み)
+const filteredKeys = computed(() => keys.value)
+
+// システム全体の確定統計メトリクス (フィルター変更に影響されず常に不変の全社総数)
+const globalStats = ref<KeyStats>({
+  total_keys: 0,
+  active_keys: 0,
+  total_monthly_usage: 0,
+  rotating_keys: 0,
+  services: [],
+  tenants: []
+})
+
+// 全社確定統計およびマスター一覧の取得 (引数なしで実行)
+async function loadGlobalStats() {
+  try {
+    const res = await client.fetchStats()
+    globalStats.value = res
+
+    if (res.services && res.services.length > 0) {
+      dynamicServices.value = res.services
+    }
+    if (res.tenants && res.tenants.length > 0) {
+      dynamicTenants.value = res.tenants
+    }
+  } catch (err: any) {
+    console.warn('Failed to load global stats:', err)
+  }
+}
+
+watch([selectedTenantFilter, selectedServiceFilter], () => {
+  refreshKeys()
+})
 
 const isCreateKeyValid = computed(() => {
   const hasName = !!newKeyForm.value.name.trim()
-  const hasTenantOrService = !!(
-    newKeyForm.value.tenant_id?.trim() || newKeyForm.value.service_id?.trim()
-  )
-  return hasName && hasTenantOrService
+  const hasService = !!newKeyForm.value.service_id?.trim()
+  return hasName && hasService
 })
 
 function getTenantName(tenantId?: string): string {
-  if (!tenantId) return 'サービス専用 (マルチテナント)'
-  const found = parsedTenants.value.find((t) => t.id === tenantId)
+  if (!tenantId) return 'サービス専用 (テナントなし)'
+  const found = availableTenants.value.find((t) => t.id === tenantId)
   return found ? found.name : tenantId
 }
 
-// データ読み込み
-async function loadAllKeys() {
+// ページネーション状態
+const pageSize = ref(50)
+const currentCursor = ref<string | undefined>(undefined)
+const nextCursor = ref<string | undefined>(undefined)
+const cursorHistory = ref<string[]>([]) // ページ戻り履歴スタック
+
+// データ読み込み (サーバーサイド フィルタ & カーソルページネーション)
+async function loadAllKeys(cursor?: string) {
   loading.value = true
   errorMessage.value = null
   try {
-    const tenantIds = parsedTenants.value.map((t) => t.id)
-    if (tenantIds.length > 0) {
-      keys.value = await client.fetchAllKeys(tenantIds)
-    } else {
-      keys.value = await client.fetchKeys(props.tenantId || undefined)
-    }
+    const tenantVal = selectedTenantFilter.value.trim()
+    const targetTenant =
+      tenantVal && tenantVal !== 'all'
+        ? tenantVal
+        : (props.tenantId || undefined)
+
+    const serviceVal = selectedServiceFilter.value.trim()
+    const targetService =
+      serviceVal && serviceVal !== 'all' ? serviceVal : undefined
+
+    const res = await client.fetchKeys({
+      tenantId: targetTenant,
+      serviceId: targetService,
+      limit: pageSize.value,
+      cursor
+    })
+    keys.value = res.keys
+    nextCursor.value = res.nextCursor
+    currentCursor.value = cursor
   } catch (err: any) {
     console.error('Failed to load Tollgate keys:', err)
     errorMessage.value = err.message || 'APIキー一覧の取得に失敗しました'
@@ -189,18 +378,48 @@ async function loadAllKeys() {
   }
 }
 
+function handleNextPage() {
+  if (!nextCursor.value) return
+  cursorHistory.value.push(currentCursor.value || '')
+  loadAllKeys(nextCursor.value)
+}
+
+function handlePrevPage() {
+  if (cursorHistory.value.length === 0) return
+  const prev = cursorHistory.value.pop()
+  loadAllKeys(prev || undefined)
+}
+
+function handlePageSizeChange() {
+  refreshKeys()
+}
+
+// キー一覧の再読み込み (カーソルリセット)
+function refreshKeys() {
+  cursorHistory.value = []
+  currentCursor.value = undefined
+  nextCursor.value = undefined
+  loadAllKeys()
+}
+
+// 全体更新 (統計 + キー一覧)
+async function refreshAll() {
+  await Promise.all([loadGlobalStats(), loadAllKeys()])
+}
+
 onMounted(() => {
-  if (parsedTenants.value.length > 0 && !newKeyForm.value.tenant_id) {
-    newKeyForm.value.tenant_id = parsedTenants.value[0].id
+  if (props.tenantId) {
+    newKeyForm.value.tenant_id = props.tenantId
   }
+  loadGlobalStats()
   loadAllKeys()
 })
 
 // キー発行
 function openCreateModal() {
   createError.value = null
-  if (parsedTenants.value.length > 0 && !newKeyForm.value.tenant_id) {
-    newKeyForm.value.tenant_id = parsedTenants.value[0].id
+  if (props.tenantId) {
+    newKeyForm.value.tenant_id = props.tenantId
   }
   showCreateModal.value = true
 }
@@ -208,7 +427,7 @@ function openCreateModal() {
 async function submitCreateKey() {
   createError.value = null
   if (!isCreateKeyValid.value) {
-    createError.value = 'キー名称を入力し、所属テナントまたはサービス識別子を指定してください。'
+    createError.value = 'キー名称とサービス識別子 (service_id) を入力してください。'
     return
   }
   try {
@@ -223,6 +442,7 @@ async function submitCreateKey() {
     } else {
       await loadAllKeys()
     }
+    loadGlobalStats()
 
     newKeyForm.value = {
       name: '',
@@ -268,6 +488,7 @@ async function submitUpdateKey() {
     }
     showEditModal.value = false
     editingKey.value = null
+    loadGlobalStats()
   } catch (err: any) {
     alert(err.message || 'APIキーの更新に失敗しました')
   }
@@ -280,6 +501,7 @@ async function handleSuspend(key: TollgateKey) {
     await client.suspendKey(key.key_id, key.tenant_id)
     key.status = 'suspended'
     key.is_active = false
+    loadGlobalStats()
   } catch (err: any) {
     alert(err.message || '一時停止に失敗しました')
   }
@@ -290,6 +512,7 @@ async function handleResume(key: TollgateKey) {
     await client.resumeKey(key.key_id, key.tenant_id)
     key.status = 'active'
     key.is_active = true
+    loadGlobalStats()
   } catch (err: any) {
     alert(err.message || '再開に失敗しました')
   }
@@ -303,11 +526,12 @@ async function handleRotate(key: TollgateKey) {
   )
     return
   try {
-    const res = await client.rotateKey(key.key_id, 86400, key.tenant_id)
+    const res = await client.rotateKey(key.key_id, 24, key.tenant_id)
     newlyCreatedRawKey.value = res.new_raw_key
     newlyCreatedKeyName.value = `${key.name} (新ローテーションキー)`
     key.status = 'rotating'
     showRawKeyModal.value = true
+    loadGlobalStats()
   } catch (err: any) {
     alert(err.message || 'ローテーションに失敗しました')
   }
@@ -318,6 +542,7 @@ async function handleDelete(key: TollgateKey) {
   try {
     await client.deleteKey(key.key_id, key.tenant_id)
     keys.value = keys.value.filter((k) => k.key_id !== key.key_id)
+    loadGlobalStats()
   } catch (err: any) {
     alert(err.message || '削除に失敗しました')
   }
@@ -371,7 +596,26 @@ function copyRawKey() {
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- エンドポイント状態バッジ (クリックで設定モーダルを開く) -->
+        <button
+          @click="openSettingsModal"
+          class="group flex items-center gap-2 px-3 py-2 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-700/80 text-xs font-medium transition-all cursor-pointer shadow-sm"
+          title="接続エンドポイント設定を開く"
+        >
+          <Server class="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+          <span class="text-slate-400 font-mono text-[11px]">
+            {{ currentApiBaseUrl || '(同一ホスト/プロキシ)' }}
+          </span>
+          <span
+            v-if="isCustomizedEndpoint"
+            class="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30"
+          >
+            カスタム
+          </span>
+          <Settings class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition-colors ml-0.5" />
+        </button>
+
         <button
           @click="openCreateModal"
           class="px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg shadow-cyan-600/30 transition-all active:scale-95 cursor-pointer"
@@ -381,10 +625,10 @@ function copyRawKey() {
         </button>
 
         <button
-          @click="loadAllKeys"
+          @click="refreshAll"
           :disabled="loading"
           class="p-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-700 transition-colors cursor-pointer"
-          title="更新"
+          title="最新の全社統計とキー一覧を再取得"
         >
           <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': loading }" />
         </button>
@@ -395,10 +639,10 @@ function copyRawKey() {
     <div v-if="errorMessage" class="p-4 bg-rose-950/40 border border-rose-800/80 rounded-2xl flex items-center gap-3 text-rose-300 text-xs sm:text-sm">
       <AlertCircle class="w-5 h-5 text-rose-400 shrink-0" />
       <span class="flex-1">{{ errorMessage }}</span>
-      <button @click="loadAllKeys" class="underline font-bold hover:text-rose-100">再試行</button>
+      <button @click="refreshAll" class="underline font-bold hover:text-rose-100">再試行</button>
     </div>
 
-    <!-- 4大メトリクスカード -->
+    <!-- 4大メトリクスカード (システム全体の確定総数を常に表示) -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 shadow-lg relative overflow-hidden group hover:border-cyan-500/30 transition-all">
         <div class="flex items-center justify-between">
@@ -408,10 +652,10 @@ function copyRawKey() {
           </div>
         </div>
         <div class="mt-3 flex items-baseline gap-2">
-          <span class="text-2xl sm:text-3xl font-black text-white">{{ keys.length }}</span>
+          <span class="text-2xl sm:text-3xl font-black text-white">{{ globalStats.total_keys }}</span>
           <span class="text-xs text-slate-500 font-medium">Keys</span>
         </div>
-        <p class="mt-1 text-[11px] text-slate-400">マルチテナント &amp; サービスキー</p>
+        <p class="mt-1 text-[11px] text-slate-400">システム全社確定キー総数</p>
       </div>
 
       <div class="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 shadow-lg relative overflow-hidden group hover:border-emerald-500/30 transition-all">
@@ -422,7 +666,7 @@ function copyRawKey() {
           </div>
         </div>
         <div class="mt-3 flex items-baseline gap-2">
-          <span class="text-2xl sm:text-3xl font-black text-emerald-400">{{ activeKeysCount }}</span>
+          <span class="text-2xl sm:text-3xl font-black text-emerald-400">{{ globalStats.active_keys }}</span>
           <span class="text-xs text-slate-500 font-medium">Keys</span>
         </div>
         <p class="mt-1 text-[11px] text-slate-400">アクティブ認可トラフィック</p>
@@ -436,7 +680,7 @@ function copyRawKey() {
           </div>
         </div>
         <div class="mt-3 flex items-baseline gap-2">
-          <span class="text-2xl sm:text-3xl font-black text-indigo-400">{{ totalMonthlyUsage.toLocaleString() }}</span>
+          <span class="text-2xl sm:text-3xl font-black text-indigo-400">{{ globalStats.total_monthly_usage.toLocaleString() }}</span>
           <span class="text-xs text-slate-500 font-medium">req</span>
         </div>
         <p class="mt-1 text-[11px] text-slate-400">全社累計消費リクエスト数</p>
@@ -450,7 +694,7 @@ function copyRawKey() {
           </div>
         </div>
         <div class="mt-3 flex items-baseline gap-2">
-          <span class="text-2xl sm:text-3xl font-black text-amber-400">{{ rotatingKeysCount }}</span>
+          <span class="text-2xl sm:text-3xl font-black text-amber-400">{{ globalStats.rotating_keys }}</span>
           <span class="text-xs text-slate-500 font-medium">Keys</span>
         </div>
         <p class="mt-1 text-[11px] text-slate-400">Grace Period 猶予中 (24h)</p>
@@ -467,7 +711,7 @@ function copyRawKey() {
         <KeyRound class="w-4 h-4" />
         <span>API キー管理</span>
         <span class="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-300 font-medium">
-          {{ keys.length }}
+          表示中 {{ keys.length }}
         </span>
       </button>
 
@@ -484,53 +728,90 @@ function copyRawKey() {
     <!-- ─── タブ 1: API キー管理 ──────────────────────────────────────── -->
     <div v-if="activeTab === 'keys'" class="space-y-6">
       
-      <!-- 検索 & フィルタバー -->
+      <!-- フィルタバー (サーバーサイド インデックス連動 & 自由入力/マスター補完) -->
       <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-3 w-full sm:w-auto flex-1">
-          <!-- 検索インプット -->
-          <div class="relative flex-1 max-w-md">
-            <Search class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto flex-1">
+          <!-- サービス絞り込みフィルタ (候補サジェスト + 自由直接入力) -->
+          <div class="flex items-center gap-2 bg-slate-900 px-3 py-2 rounded-xl border border-slate-700 shrink-0 focus-within:border-indigo-500 transition-colors">
+            <Cpu class="w-4 h-4 text-indigo-400 shrink-0" />
+            <span class="text-xs text-slate-400 font-medium">サービス:</span>
             <input
-              v-model="searchQuery"
+              v-model="selectedServiceFilter"
+              list="filter-service-options"
               type="text"
-              placeholder="キー名, プレフィックス, テナントIDで検索..."
-              class="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+              placeholder="全サービス (入力/選択)"
+              class="bg-transparent border-0 text-indigo-300 text-xs font-semibold focus:outline-none w-40 placeholder-slate-500"
             />
+            <button
+              v-if="selectedServiceFilter"
+              @click="selectedServiceFilter = ''"
+              class="text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors cursor-pointer"
+              title="サービスフィルタをクリア"
+            >
+              <X class="w-3.5 h-3.5" />
+            </button>
+            <datalist id="filter-service-options">
+              <option
+                v-for="svc in availableServices"
+                :key="svc"
+                :value="svc"
+              >
+                {{ svc }}
+              </option>
+            </datalist>
           </div>
 
-          <!-- テナント絞り込みフィルタ -->
-          <div v-if="parsedTenants.length > 0" class="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 shrink-0">
+          <!-- テナント絞り込みフィルタ (候補サジェスト + 自由直接入力) -->
+          <div class="flex items-center gap-2 bg-slate-900 px-3 py-2 rounded-xl border border-slate-700 shrink-0 focus-within:border-cyan-500 transition-colors">
             <Building2 class="w-4 h-4 text-cyan-400 shrink-0" />
             <span class="text-xs text-slate-400 font-medium">テナント:</span>
-            <select
+            <input
               v-model="selectedTenantFilter"
-              class="bg-transparent border-0 text-cyan-300 text-xs font-bold focus:outline-none cursor-pointer pr-2 py-0.5 max-w-[160px] truncate"
+              list="filter-tenant-options"
+              type="text"
+              placeholder="全テナント (入力/選択)"
+              class="bg-transparent border-0 text-cyan-300 text-xs font-semibold focus:outline-none w-44 placeholder-slate-500"
+            />
+            <button
+              v-if="selectedTenantFilter"
+              @click="selectedTenantFilter = ''"
+              class="text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors cursor-pointer"
+              title="テナントフィルタをクリア"
             >
-              <option value="all" class="bg-slate-900 text-slate-200">すべてのテナント</option>
-              <option value="service_only" class="bg-slate-900 text-purple-300">サービス専用 (未指定)</option>
+              <X class="w-3.5 h-3.5" />
+            </button>
+            <datalist id="filter-tenant-options">
+              <option value="service_only">サービス専用 (テナント未指定)</option>
               <option
-                v-for="t in parsedTenants"
+                v-for="t in availableTenants"
                 :key="t.id"
                 :value="t.id"
-                class="bg-slate-900 text-slate-200 font-normal"
               >
-                {{ t.name }}
+                {{ t.name !== t.id ? `${t.name} (${t.id})` : t.name }}
               </option>
-            </select>
+            </datalist>
+          </div>
+
+          <!-- フィルター適用中バッジ表示 (ワンクリッククリア用) -->
+          <div v-if="selectedTenantFilter || selectedServiceFilter" class="flex items-center gap-2">
+            <button
+              @click="selectedTenantFilter = ''; selectedServiceFilter = ''"
+              class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center gap-1 transition-colors border border-slate-700/60 cursor-pointer"
+            >
+              <X class="w-3 h-3 text-rose-400" />
+              <span>条件クリア</span>
+            </button>
           </div>
         </div>
 
-        <div class="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+        <div class="flex items-center gap-2">
           <button
-            v-for="st in ['all', 'active', 'suspended', 'rotating', 'revoked']"
-            :key="st"
-            @click="selectedStatusFilter = st"
-            class="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors capitalize shrink-0 cursor-pointer"
-            :class="selectedStatusFilter === st
-              ? 'bg-cyan-950 text-cyan-300 border-cyan-700 font-bold'
-              : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'"
+            @click="refreshAll"
+            class="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="最新データを再取得"
           >
-            {{ st === 'all' ? 'すべての状態' : st }}
+            <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': loading }" />
+            <span>更新</span>
           </button>
         </div>
       </div>
@@ -542,7 +823,12 @@ function copyRawKey() {
             <KeyRound class="w-4 h-4 text-cyan-400" />
             <h2 class="text-sm font-bold text-white">発行済み API キー一覧</h2>
           </div>
-          <span class="text-xs text-slate-500 font-medium">該当: {{ filteredKeys.length }} 件</span>
+          <div class="flex items-center gap-2 text-xs text-slate-400">
+            <span v-if="selectedTenantFilter || selectedServiceFilter" class="px-2 py-0.5 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-800/50 text-[10px] font-medium">
+              サーバー絞り込み中
+            </span>
+            <span class="font-medium">表示中: {{ filteredKeys.length }} 件</span>
+          </div>
         </div>
 
         <div class="overflow-x-auto">
@@ -550,7 +836,7 @@ function copyRawKey() {
             <thead>
               <tr class="border-b border-slate-800 bg-slate-950/40 text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
                 <th class="py-3 px-4">キー名称 / プレフィックス</th>
-                <th class="py-3 px-4">テナント / サービス</th>
+                <th class="py-3 px-4">サービス / テナント</th>
                 <th class="py-3 px-4">ステータス</th>
                 <th class="py-3 px-4">レートリミット (RPM)</th>
                 <th class="py-3 px-4">月間クォータ利用</th>
@@ -577,13 +863,15 @@ function copyRawKey() {
                   </div>
                 </td>
 
-                <!-- テナント / サービス -->
+                <!-- サービス / テナント -->
                 <td class="py-3 px-4">
-                  <div class="font-medium text-slate-300">
-                    {{ getTenantName(k.tenant_id) }}
+                  <div class="font-medium text-indigo-300 font-mono text-xs flex items-center gap-1">
+                    <Cpu class="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    <span>{{ k.service_id || '(未指定)' }}</span>
                   </div>
-                  <div v-if="k.service_id" class="text-[11px] text-slate-500 font-mono">
-                    svc: {{ k.service_id }}
+                  <div class="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                    <Building2 class="w-3 h-3 text-slate-500 shrink-0" />
+                    <span>{{ getTenantName(k.tenant_id) }}</span>
                   </div>
                 </td>
 
@@ -696,6 +984,48 @@ function copyRawKey() {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- ページネーションバー -->
+        <div class="px-5 py-3.5 bg-slate-900/90 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+          <div class="flex items-center gap-3">
+            <span>表示中: <strong class="text-white font-mono">{{ filteredKeys.length }}</strong> 件</span>
+            <span class="text-slate-600">|</span>
+            <div class="flex items-center gap-1.5">
+              <span>表示件数:</span>
+              <select
+                v-model.number="pageSize"
+                @change="handlePageSizeChange"
+                class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500 cursor-pointer"
+              >
+                <option :value="25">25 件</option>
+                <option :value="50">50 件</option>
+                <option :value="100">100 件</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button
+              @click="handlePrevPage"
+              :disabled="cursorHistory.length === 0 || loading"
+              class="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <ChevronLeft class="w-3.5 h-3.5" />
+              <span>前へ</span>
+            </button>
+            <span v-if="cursorHistory.length > 0" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 font-mono text-[11px] border border-cyan-800">
+              Page {{ cursorHistory.length + 1 }}
+            </span>
+            <button
+              @click="handleNextPage"
+              :disabled="!nextCursor || loading"
+              class="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <span>次へ</span>
+              <ChevronRight class="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -821,25 +1151,30 @@ function copyRawKey() {
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block font-semibold text-slate-300 mb-1">テナント (任意)</label>
-              <select
-                v-model="newKeyForm.tenant_id"
-                class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 focus:outline-none focus:border-cyan-500"
-              >
-                <option value="">サービス専用 (マルチテナント)</option>
-                <option v-for="t in parsedTenants" :key="t.id" :value="t.id">
-                  {{ t.name }}
-                </option>
-              </select>
-            </div>
-            <div>
-              <label class="block font-semibold text-slate-300 mb-1">サービス ID (任意)</label>
+              <label class="block font-semibold text-slate-300 mb-1">サービス ID *</label>
               <input
                 v-model="newKeyForm.service_id"
+                list="modal-service-options"
                 type="text"
-                placeholder="例: internal_app"
+                placeholder="例: billing-svc (必須)"
                 class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500"
               />
+              <datalist id="modal-service-options">
+                <option v-for="svc in availableServices" :key="svc" :value="svc">{{ svc }}</option>
+              </datalist>
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">テナント ID (任意)</label>
+              <input
+                v-model="newKeyForm.tenant_id"
+                list="modal-tenant-options"
+                type="text"
+                placeholder="未指定時はサービス専用キー"
+                class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+              />
+              <datalist id="modal-tenant-options">
+                <option v-for="t in availableTenants" :key="t.id" :value="t.id">{{ t.name !== t.id ? `${t.name} (${t.id})` : t.name }}</option>
+              </datalist>
             </div>
           </div>
 
@@ -983,6 +1318,109 @@ function copyRawKey() {
           >
             更新を保存
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── モーダル: 接続エンドポイント設定 ──────────────────────────────────── -->
+    <div v-if="showSettingsModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+              <Settings class="w-5 h-5" />
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white">接続エンドポイント設定</h3>
+              <p class="text-[11px] text-slate-400">Nginx リバースプロキシや API Gateway の接続先 URL を変更</p>
+            </div>
+          </div>
+          <button @click="showSettingsModal = false" class="text-slate-400 hover:text-white cursor-pointer text-lg">&times;</button>
+        </div>
+
+        <div class="space-y-4 text-xs">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-semibold text-slate-300">API Base URL (エンドポイント)</label>
+              <span class="text-[10px] text-slate-500 font-mono">
+                環境変数: {{ defaultEnvBaseUrl || '(未設定)' }}
+              </span>
+            </div>
+            <div class="relative">
+              <input
+                v-model="settingsForm.apiBaseUrl"
+                type="text"
+                placeholder="例: http://localhost:8000 または /api"
+                class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-100 font-mono text-xs placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">
+              ※ 空文字の場合は同一オリジン（<code>/v1/...</code>）または Vite プロキシを使用します。
+            </p>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-semibold text-slate-300">Admin Secret トークン (Bearer / X-Admin-Secret)</label>
+              <span class="text-[10px] text-slate-500 font-mono">
+                環境変数: {{ defaultEnvAdminToken ? '******' : '(未設定)' }}
+              </span>
+            </div>
+            <input
+              v-model="settingsForm.adminToken"
+              type="password"
+              placeholder="admin-secret-key-for-local-dev"
+              class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-100 font-mono text-xs placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+
+          <!-- 接続テスト結果表示 -->
+          <div
+            v-if="testResult"
+            :class="testResult.ok ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300' : 'bg-rose-950/40 border-rose-800 text-rose-300'"
+            class="p-3 border rounded-xl flex items-center gap-2.5"
+          >
+            <CheckCircle2 v-if="testResult.ok" class="w-4 h-4 text-emerald-400 shrink-0" />
+            <AlertCircle v-else class="w-4 h-4 text-rose-400 shrink-0" />
+            <span class="text-[11px] leading-relaxed">{{ testResult.message }}</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-3 border-t border-slate-800">
+          <div class="flex items-center gap-2">
+            <button
+              @click="runConnectionTest"
+              :disabled="testingConnection"
+              class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': testingConnection }" />
+              <span>{{ testingConnection ? 'テスト中...' : '接続テスト' }}</span>
+            </button>
+            <button
+              v-if="isCustomizedEndpoint"
+              @click="resetSettings"
+              class="px-3 py-2 text-slate-400 hover:text-amber-300 rounded-xl text-xs font-medium flex items-center gap-1 cursor-pointer transition-colors"
+              title="環境変数・Propsの初期値に戻す"
+            >
+              <RotateCcw class="w-3.5 h-3.5" />
+              <span>初期値に戻す</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button
+              @click="showSettingsModal = false"
+              class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer"
+            >
+              キャンセル
+            </button>
+            <button
+              @click="saveSettings"
+              class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-cyan-600/30 cursor-pointer transition-all"
+            >
+              保存して接続
+            </button>
+          </div>
         </div>
       </div>
     </div>

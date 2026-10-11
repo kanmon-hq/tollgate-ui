@@ -80,3 +80,12 @@ export interface TollgateConfig {
   tenantId?: string
   tenants?: TenantOption[]
 }
+
+export interface KeyStats {
+  total_keys: number
+  active_keys: number
+  total_monthly_usage: number
+  rotating_keys: number
+  services?: string[]
+  tenants?: string[]
+}

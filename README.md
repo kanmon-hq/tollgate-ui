@@ -113,14 +113,37 @@ export function TollgateAdminPage() {
 
 ## Props (Attributes / Properties)
 
-| 属性名 | 型 | 説明 | デフォルト値 |
+| 属性名 | 型 | 説明 | デフォルト値 / 環境変数フォールバック |
 | :--- | :--- | :--- | :--- |
-| `api-base-url` | `string` | Tollgate サーバーの Base URL (例: `http://localhost:8000`) | `""` |
-| `admin-token` | `string` | 管理者認可シークレット / Bearer トークン | `""` |
+| `api-base-url` | `string` | Tollgate サーバーの Base URL (例: `http://localhost:8000`, `/api`) | `""` / `VITE_TOLLGATE_API_BASE_URL` |
+| `admin-token` | `string` | 管理者認可シークレット / Bearer トークン | `""` / `VITE_TOLLGATE_ADMIN_TOKEN` |
 | `tenant-id` | `string` | 特定テナントに限定する場合のテナントID | `""` |
-| `tenants-json` | `string` \| `TenantOption[]` | テナント一覧の配列（またはJSON文字列） | `[]` |
+| `tenants-json` | `string` \| `TenantOption[]` | テナント一覧の配列（またはJSON文字列） | `[]` / `VITE_TOLLGATE_TENANTS` |
 | `embedded` | `boolean` | ヘッダーを非表示にしてコンポーネントのみ埋め込むモード | `false` |
 | `title` | `string` | ヘッダータイトル | `"API Key Gateway (Tollgate) 管理コンソール"` |
+
+## 環境変数 (デフォルト設定)
+
+ビルド時やローカル開発時、属性が省略された場合のデフォルト値を `.env` 等の環境変数で設定可能です：
+
+```env
+# Tollgate UI — Environment Variables
+VITE_TOLLGATE_API_BASE_URL=http://localhost:8000
+VITE_TOLLGATE_ADMIN_TOKEN=admin-secret-key-for-local-dev
+VITE_TOLLGATE_TENANTS=[{"id":"tenant-risk-01","name":"Risk Division"},{"id":"tenant-finance-02","name":"Finance Division"}]
+```
+
+## UI 上での動的エンドポイント変更
+
+- ヘッダー右上の **エンドポイントバッジ / 接続設定ボタン（⚙️）** をクリックすることで、モーダル上から API Base URL や Admin Token を動的に変更・接続テスト・即時リロードが可能です。
+- UI 上で変更した設定はブラウザの `localStorage` に保持され、リロード後も維持されます。「初期値に戻す」ボタンで環境変数/Props のデフォルト値に戻すことができます。
+
+## 解決優先順位 (Resolution Order)
+
+1. **UI 手動設定** (`localStorage`)
+2. **Props / Attributes** (`api-base-url`, `admin-token`, `tenants-json`)
+3. **環境変数** (`VITE_TOLLGATE_*`) またはグローバル定義 (`window.__TOLLGATE_CONFIG__`)
+4. **デフォルト値** (同一オリジン / 空文字)
 
 ## 開発
 
@@ -128,7 +151,7 @@ export function TollgateAdminPage() {
 # 依存関係インストール
 npm install
 
-# 開発サーバー起動
+# 開発サーバー起動 (http://localhost:5173/)
 npm run dev
 
 # Web Components ライブラリビルド
