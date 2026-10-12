@@ -1,46 +1,60 @@
 # @kanmon-hq/tollgate-ui
 
-Tollgate API Gateway & Key Broker 向けの組み込み型 Web Components UI ライブラリ。  
-Vue 3、React、Next.js、Vanilla HTML などあらゆるフロントエンド環境に単一のカスタム要素として簡単に組み込み可能です。
+**English** | [日本語](README.ja.md)
 
-## 特徴
+[![npm version](https://img.shields.io/npm/v/@kanmon-hq/tollgate-ui.svg)](https://www.npmjs.com/package/@kanmon-hq/tollgate-ui)
+[![License](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 
-- ⚡ **Web Components (Custom Elements)**: フレームワークに依存せず `<tollgate-console>` タグで利用可能
-- 🛡️ **Shadow DOM スコープ保護**: ホストアプリケーションの CSS と干渉しない完全隔離スタイリング
-- 🎨 **リッチな管理 UI**: API キーの発行・クォータ管理・レートリミット制御・Graceful ローテーション・キー単体認可検証テスターを内蔵
-- 🏢 **マルチテナント完全対応**: テナント切り替え、スコープ管理、サービスキー分離に対応
+An embeddable, framework-agnostic Web Components UI suite for the **Tollgate** API Gateway & Key Broker.  
+Easily embed a full-featured API key management console into any frontend stack (Vue 3, React, Next.js, Angular, or Vanilla HTML) via a single `<tollgate-console>` custom element.
 
-## インストール
+---
 
-### npm からインストール (推奨)
+## Features
+
+- ⚡ **Web Components (Custom Elements)**: Framework-independent, drops into any web app via `<tollgate-console>`.
+- 🛡️ **Shadow DOM Style Isolation**: Zero CSS leakage. Completely isolated styling that never conflicts with host application stylesheets (Bootstrap, Tailwind, etc.).
+- 🎨 **Feature-Rich Admin UI**: Built-in issuance, quota and RPM limits, graceful zero-downtime key rotation, suspensions, and real-time authorization testing.
+- 🏢 **Multi-Tenant Native**: Seamless switching between tenants, scope selection, service key separation, and bulk tenant revocation.
+- ⚙️ **Interactive Connection Settings**: Dynamic modal in the UI to update API Base URLs and Admin Tokens on the fly with `localStorage` persistence.
+
+---
+
+## Installation
+
+### From npm (Recommended)
 
 ```bash
 npm install @kanmon-hq/tollgate-ui
-# または
+# or
 pnpm add @kanmon-hq/tollgate-ui
-# または
+# or
 yarn add @kanmon-hq/tollgate-ui
 ```
 
-### GitHub Packages からインストール
+### From GitHub Packages
 
-プロジェクト直下の `.npmrc` に以下を設定してインストールします：
+Configure your `.npmrc` in the project root:
 
 ```ini
 @kanmon-hq:registry=https://npm.pkg.github.com
 ```
 
+Then install:
+
 ```bash
 npm install @kanmon-hq/tollgate-ui
 ```
 
-## 使い方
+---
+
+## Usage
 
 ### 1. Vanilla HTML / CDN
 
 ```html
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <script type="module" src="https://unpkg.com/@kanmon-hq/tollgate-ui/dist/tollgate-ui.js"></script>
@@ -55,18 +69,18 @@ npm install @kanmon-hq/tollgate-ui
 </html>
 ```
 
-### 2. Vue 3 での利用
+### 2. Vue 3
 
 ```vue
 <script setup lang="ts">
 import '@kanmon-hq/tollgate-ui'
-// または
+// Alternatively:
 // import { registerTollgateUI } from '@kanmon-hq/tollgate-ui'
 // registerTollgateUI()
 
 const tenants = [
-  { id: 'tenant-corp-a', name: '企業 A' },
-  { id: 'tenant-corp-b', name: '企業 B' }
+  { id: 'tenant-corp-a', name: 'Corp A' },
+  { id: 'tenant-corp-b', name: 'Corp B' }
 ]
 </script>
 
@@ -74,16 +88,16 @@ const tenants = [
   <div class="p-6">
     <tollgate-console
       api-base-url="/api"
-      admin-token="secret-token"
+      admin-token="your-admin-secret"
       :tenants-json="tenants"
     />
   </div>
 </template>
 ```
 
-> **Note (Vue 3)**: Vite 設定等でカスタム要素として扱う場合は `compilerOptions.isCustomElement: (tag) => tag.startsWith('tollgate-')` を指定してください。
+> **Vue 3 Tip**: If using Vite, configure `compilerOptions.isCustomElement: (tag) => tag.startsWith('tollgate-')` in `@vitejs/plugin-vue` to avoid custom element compiler warnings.
 
-### 3. React / Next.js での利用
+### 3. React / Next.js
 
 ```tsx
 import React, { useEffect } from 'react'
@@ -94,8 +108,8 @@ export function TollgateAdminPage() {
   }, [])
 
   const tenants = [
-    { id: 'tenant-corp-a', name: '企業 A' },
-    { id: 'tenant-corp-b', name: '企業 B' }
+    { id: 'tenant-corp-a', name: 'Corp A' },
+    { id: 'tenant-corp-b', name: 'Corp B' }
   ]
 
   return (
@@ -111,20 +125,24 @@ export function TollgateAdminPage() {
 }
 ```
 
+---
+
 ## Props (Attributes / Properties)
 
-| 属性名 | 型 | 説明 | デフォルト値 / 環境変数フォールバック |
-| :--- | :--- | :--- | :--- |
-| `api-base-url` | `string` | Tollgate サーバーの Base URL (例: `http://localhost:8000`, `/api`) | `""` / `VITE_TOLLGATE_API_BASE_URL` |
-| `admin-token` | `string` | 管理者認可シークレット / Bearer トークン | `""` / `VITE_TOLLGATE_ADMIN_TOKEN` |
-| `tenant-id` | `string` | 特定テナントに限定する場合のテナントID | `""` |
-| `tenants-json` | `string` \| `TenantOption[]` | テナント一覧の配列（またはJSON文字列） | `[]` / `VITE_TOLLGATE_TENANTS` |
-| `embedded` | `boolean` | ヘッダーを非表示にしてコンポーネントのみ埋め込むモード | `false` |
-| `title` | `string` | ヘッダータイトル | `"API Key Gateway (Tollgate) 管理コンソール"` |
+| Attribute | Type | Description | Default / Fallback |
+|:---|:---|:---|:---|
+| `api-base-url` | `string` | Base URL of the Tollgate server (e.g. `http://localhost:8000`, `/api`) | `""` / `VITE_TOLLGATE_API_BASE_URL` |
+| `admin-token` | `string` | Master administrative secret / Bearer token | `""` / `VITE_TOLLGATE_ADMIN_TOKEN` |
+| `tenant-id` | `string` | Restrict console to a specific tenant ID | `""` |
+| `tenants-json` | `string` \| `TenantOption[]` | Array of selectable tenants (or JSON string) | `[]` / `VITE_TOLLGATE_TENANTS` |
+| `embedded` | `boolean` | Hide header banner for cleaner embedded layouts | `false` |
+| `title` | `string` | Header banner title text | `"API Key Gateway (Tollgate) Management Console"` |
 
-## 環境変数 (デフォルト設定)
+---
 
-ビルド時やローカル開発時、属性が省略された場合のデフォルト値を `.env` 等の環境変数で設定可能です：
+## Environment Variables (Build Defaults)
+
+When running locally or building default configuration bundles, fallbacks can be injected via `.env`:
 
 ```env
 # Tollgate UI — Environment Variables
@@ -133,31 +151,34 @@ VITE_TOLLGATE_ADMIN_TOKEN=admin-secret-key-for-local-dev
 VITE_TOLLGATE_TENANTS=[{"id":"tenant-risk-01","name":"Risk Division"},{"id":"tenant-finance-02","name":"Finance Division"}]
 ```
 
-## UI 上での動的エンドポイント変更
+---
 
-- ヘッダー右上の **エンドポイントバッジ / 接続設定ボタン（⚙️）** をクリックすることで、モーダル上から API Base URL や Admin Token を動的に変更・接続テスト・即時リロードが可能です。
-- UI 上で変更した設定はブラウザの `localStorage` に保持され、リロード後も維持されます。「初期値に戻す」ボタンで環境変数/Props のデフォルト値に戻すことができます。
+## Configuration Resolution Order
 
-## 解決優先順位 (Resolution Order)
+Configuration values resolve in the following order of precedence:
 
-1. **UI 手動設定** (`localStorage`)
-2. **Props / Attributes** (`api-base-url`, `admin-token`, `tenants-json`)
-3. **環境変数** (`VITE_TOLLGATE_*`) またはグローバル定義 (`window.__TOLLGATE_CONFIG__`)
-4. **デフォルト値** (同一オリジン / 空文字)
+1. **Interactive UI Overrides** (`localStorage` via connection settings modal)
+2. **Component Attributes / Props** (`api-base-url`, `admin-token`, `tenants-json`)
+3. **Build Environment Variables** (`VITE_TOLLGATE_*`) or Global Object (`window.__TOLLGATE_CONFIG__`)
+4. **Defaults** (Same-origin relative path / empty strings)
 
-## 開発
+---
+
+## Development
 
 ```bash
-# 依存関係インストール
+# Install dependencies
 npm install
 
-# 開発サーバー起動 (http://localhost:5173/)
+# Start development server (http://localhost:5173/)
 npm run dev
 
-# Web Components ライブラリビルド
+# Build Web Component library bundle
 npm run build
 ```
 
-## ライセンス
+---
 
-MPL-2.0
+## License
+
+This project is licensed under the [Mozilla Public License 2.0 (MPL-2.0)](LICENSE).
