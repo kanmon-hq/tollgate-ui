@@ -10,7 +10,9 @@ import type {
   RotateKeyOutput,
   VerifyKeyResult,
   TenantOption,
-  TollgateConfig
+  TollgateConfig,
+  ScopeItem,
+  PathRule
 } from './types'
 
 // Custom Element の定義
@@ -46,7 +48,9 @@ export type {
   RotateKeyOutput,
   VerifyKeyResult,
   TenantOption,
-  TollgateConfig
+  TollgateConfig,
+  ScopeItem,
+  PathRule
 }
 
 export default registerTollgateUI

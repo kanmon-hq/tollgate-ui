@@ -5,7 +5,8 @@ import type {
   UpdateKeyInput,
   RotateKeyOutput,
   VerifyKeyResult,
-  KeyStats
+  KeyStats,
+  ScopeItem
 } from '../types'
 
 export class TollgateApiClient {
@@ -141,6 +142,16 @@ export class TollgateApiClient {
     if (serviceId) params.set('service_id', serviceId)
     const query = params.toString() ? `?${params.toString()}` : ''
     return this.request<KeyStats>(`/v1/admin/stats${query}`, { tenantId })
+  }
+
+  async fetchAvailableScopes(): Promise<ScopeItem[]> {
+    try {
+      const data = await this.request<{ scopes?: ScopeItem[] } | ScopeItem[]>('/v1/admin/scopes')
+      if (Array.isArray(data)) return data
+      return data.scopes || []
+    } catch {
+      return []
+    }
   }
 
   async fetchAllKeys(tenantIds: string[]): Promise<TollgateKey[]> {

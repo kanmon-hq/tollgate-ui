@@ -45,7 +45,8 @@ import type {
   UpdateKeyInput,
   TenantOption,
   VerifyKeyResult,
-  KeyStats
+  KeyStats,
+  ScopeItem
 } from '../types'
 
 // Props 定義 (Web Component の attribute / property としてマッピングされる)
@@ -246,6 +247,7 @@ const editingKey = ref<TollgateKey | null>(null)
 
 const editKeyForm = ref({
   name: '',
+  scopes: [] as string[],
   rate_limit_rpm: 600,
   monthly_quota: 0
 })
@@ -254,11 +256,15 @@ const newlyCreatedRawKey = ref('')
 const newlyCreatedKeyName = ref('')
 const copySuccess = ref(false)
 
+const availableScopes = ref<ScopeItem[]>([])
+const newScopeInput = ref('')
+const editScopeInput = ref('')
+
 const newKeyForm = ref<CreateKeyInput>({
   name: '',
   tenant_id: '',
   service_id: '',
-  scopes: ['ai:*', 'mcp:*', 'llm:*'],
+  scopes: [],
   rate_limit_rpm: 600,
   monthly_quota: 100000,
   expires_in: 2592000 // 30 days
@@ -321,6 +327,70 @@ async function loadGlobalStats() {
     }
   } catch (err: any) {
     console.warn('Failed to load global stats:', err)
+  }
+}
+
+// 利用可能スコープ一覧の取得
+async function loadAvailableScopes() {
+  try {
+    const res = await client.fetchAvailableScopes()
+    availableScopes.value = res || []
+  } catch (err: any) {
+    console.warn('Failed to load available scopes:', err)
+  }
+}
+
+// 新規キーのスコープ操作
+function addScopeToNewKey(scope: string) {
+  const s = scope.trim()
+  if (s && !newKeyForm.value.scopes.includes(s)) {
+    newKeyForm.value.scopes.push(s)
+  }
+}
+
+function removeScopeFromNewKey(scope: string) {
+  newKeyForm.value.scopes = newKeyForm.value.scopes.filter((s) => s !== scope)
+}
+
+function toggleScopeInNewKey(scope: string) {
+  if (newKeyForm.value.scopes.includes(scope)) {
+    removeScopeFromNewKey(scope)
+  } else {
+    addScopeToNewKey(scope)
+  }
+}
+
+function handleAddNewScope() {
+  if (newScopeInput.value.trim()) {
+    addScopeToNewKey(newScopeInput.value.trim())
+    newScopeInput.value = ''
+  }
+}
+
+// 編集キーのスコープ操作
+function addScopeToEditKey(scope: string) {
+  const s = scope.trim()
+  if (s && !editKeyForm.value.scopes.includes(s)) {
+    editKeyForm.value.scopes.push(s)
+  }
+}
+
+function removeScopeFromEditKey(scope: string) {
+  editKeyForm.value.scopes = editKeyForm.value.scopes.filter((s) => s !== scope)
+}
+
+function toggleScopeInEditKey(scope: string) {
+  if (editKeyForm.value.scopes.includes(scope)) {
+    removeScopeFromEditKey(scope)
+  } else {
+    addScopeToEditKey(scope)
+  }
+}
+
+function handleAddEditScope() {
+  if (editScopeInput.value.trim()) {
+    addScopeToEditKey(editScopeInput.value.trim())
+    editScopeInput.value = ''
   }
 }
 
@@ -402,9 +472,9 @@ function refreshKeys() {
   loadAllKeys()
 }
 
-// 全体更新 (統計 + キー一覧)
+// 全体更新 (統計 + キー一覧 + スコープ)
 async function refreshAll() {
-  await Promise.all([loadGlobalStats(), loadAllKeys()])
+  await Promise.all([loadGlobalStats(), loadAllKeys(), loadAvailableScopes()])
 }
 
 onMounted(() => {
@@ -413,11 +483,13 @@ onMounted(() => {
   }
   loadGlobalStats()
   loadAllKeys()
+  loadAvailableScopes()
 })
 
 // キー発行
 function openCreateModal() {
   createError.value = null
+  newScopeInput.value = ''
   if (props.tenantId) {
     newKeyForm.value.tenant_id = props.tenantId
   }
@@ -443,12 +515,13 @@ async function submitCreateKey() {
       await loadAllKeys()
     }
     loadGlobalStats()
+    loadAvailableScopes()
 
     newKeyForm.value = {
       name: '',
       tenant_id: parsedTenants.value[0]?.id || '',
       service_id: '',
-      scopes: ['ai:*', 'mcp:*', 'llm:*'],
+      scopes: [],
       rate_limit_rpm: 600,
       monthly_quota: 100000,
       expires_in: 2592000
@@ -464,9 +537,11 @@ function openEditModal(key: TollgateKey) {
   editingKey.value = key
   editKeyForm.value = {
     name: key.name,
+    scopes: [...(key.scopes || [])],
     rate_limit_rpm: key.rate_limit_rpm || 600,
     monthly_quota: key.monthly_quota || 0
   }
+  editScopeInput.value = ''
   showEditModal.value = true
 }
 
@@ -477,6 +552,7 @@ async function submitUpdateKey() {
       editingKey.value.key_id,
       {
         name: editKeyForm.value.name.trim(),
+        scopes: editKeyForm.value.scopes,
         rate_limit_rpm: Number(editKeyForm.value.rate_limit_rpm),
         monthly_quota: Number(editKeyForm.value.monthly_quota)
       },
@@ -489,6 +565,7 @@ async function submitUpdateKey() {
     showEditModal.value = false
     editingKey.value = null
     loadGlobalStats()
+    loadAvailableScopes()
   } catch (err: any) {
     alert(err.message || 'APIキーの更新に失敗しました')
   }
@@ -1121,6 +1198,82 @@ function copyRawKey() {
           </p>
         </div>
       </div>
+
+      <!-- 設定可能スコープ & パス認可ルール一覧テーブル -->
+      <div class="bg-slate-900/60 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+        <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <Sliders class="w-4 h-4 text-cyan-400" />
+            <h3 class="text-sm font-bold text-white">設定可能スコープ &amp; パス認可ルール一覧</h3>
+          </div>
+          <span class="text-xs text-slate-400 font-mono">合計 {{ availableScopes.length }} 件</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr class="border-b border-slate-800 bg-slate-950/40 text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
+                <th class="py-3 px-4">スコープ識別子</th>
+                <th class="py-3 px-4">対象パス / ルートプレフィックス</th>
+                <th class="py-3 px-4">HTTP メソッド</th>
+                <th class="py-3 px-4">ルール概要</th>
+                <th class="py-3 px-4">ソース元</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/60 text-slate-200">
+              <tr
+                v-for="item in availableScopes"
+                :key="item.scope + ':' + (item.path || '') + ':' + (item.method || '')"
+                class="hover:bg-slate-800/30 transition-colors"
+              >
+                <td class="py-3 px-4 font-mono font-bold text-cyan-400">
+                  <span class="px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-800/60 text-cyan-300">
+                    {{ item.scope }}
+                  </span>
+                </td>
+                <td class="py-3 px-4 font-mono text-slate-300">
+                  <span v-if="item.prefix || item.path">{{ (item.prefix || '') + (item.path || '') }}</span>
+                  <span v-else class="text-slate-500">-</span>
+                </td>
+                <td class="py-3 px-4 font-mono">
+                  <span
+                    v-if="item.method"
+                    class="px-2 py-0.5 rounded text-[10px] font-bold"
+                    :class="{
+                      'bg-emerald-950 text-emerald-400 border border-emerald-800': item.method === 'GET',
+                      'bg-indigo-950 text-indigo-400 border border-indigo-800': item.method === 'POST',
+                      'bg-amber-950 text-amber-400 border border-amber-800': item.method === 'PUT' || item.method === 'PATCH',
+                      'bg-rose-950 text-rose-400 border border-rose-800': item.method === 'DELETE'
+                    }"
+                  >
+                    {{ item.method }}
+                  </span>
+                  <span v-else class="text-slate-500 font-mono text-xs">ANY</span>
+                </td>
+                <td class="py-3 px-4 text-slate-300 text-xs">
+                  {{ item.description || '-' }}
+                </td>
+                <td class="py-3 px-4">
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-mono border"
+                    :class="{
+                      'bg-cyan-950/60 text-cyan-400 border-cyan-800/60': item.source === 'path_rule',
+                      'bg-indigo-950/60 text-indigo-400 border-indigo-800/60': item.source === 'route'
+                    }"
+                  >
+                    {{ item.source === 'path_rule' ? 'パス詳細ルール' : 'ルート定義' }}
+                  </span>
+                </td>
+              </tr>
+              <tr v-if="availableScopes.length === 0">
+                <td colspan="5" class="py-8 text-center text-slate-500">
+                  設定可能なスコープはまだ定義されていません。
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ─── モーダル: 新規 API キー発行 ──────────────────────────────── -->
@@ -1175,6 +1328,72 @@ function copyRawKey() {
               <datalist id="modal-tenant-options">
                 <option v-for="t in availableTenants" :key="t.id" :value="t.id">{{ t.name !== t.id ? `${t.name} (${t.id})` : t.name }}</option>
               </datalist>
+            </div>
+          </div>
+
+          <!-- スコープ設定 -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="block font-semibold text-slate-300">許可スコープ (Scopes)</label>
+              <span class="text-[10px] text-slate-400">例: billing:*, billing:admin, billing:read</span>
+            </div>
+
+            <!-- 現在選択中のスコープタグ一覧 -->
+            <div class="min-h-[38px] p-2 bg-slate-950 border border-slate-700 rounded-xl flex flex-wrap items-center gap-1.5 focus-within:border-cyan-500">
+              <span
+                v-for="s in newKeyForm.scopes"
+                :key="s"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-cyan-950/80 border border-cyan-800/80 text-cyan-300 font-mono text-[11px]"
+              >
+                {{ s }}
+                <button
+                  type="button"
+                  @click="removeScopeFromNewKey(s)"
+                  class="text-cyan-400 hover:text-white ml-0.5 cursor-pointer font-bold"
+                >
+                  &times;
+                </button>
+              </span>
+              <span v-if="!newKeyForm.scopes || newKeyForm.scopes.length === 0" class="text-slate-500 text-[11px] italic">
+                スコープが設定されていません (未指定時は制限なし)
+              </span>
+            </div>
+
+            <!-- スコープ直接追加フォーム -->
+            <div class="flex items-center gap-2">
+              <input
+                v-model="newScopeInput"
+                @keydown.enter.prevent="handleAddNewScope"
+                type="text"
+                placeholder="カスタムスコープを入力して Enter または追加"
+                class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 text-xs font-mono"
+              />
+              <button
+                type="button"
+                @click="handleAddNewScope"
+                class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+              >
+                追加
+              </button>
+            </div>
+
+            <!-- 利用可能なスコープ候補 (サジェスト / チップ) -->
+            <div v-if="availableScopes.length > 0" class="space-y-1 pt-1">
+              <span class="text-[10px] text-slate-400 font-medium">利用可能スコープ (クリックでトグル追加/解除):</span>
+              <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 bg-slate-950/40 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  v-for="item in availableScopes"
+                  :key="item.scope + ':' + (item.path || '')"
+                  @click="toggleScopeInNewKey(item.scope)"
+                  :class="newKeyForm.scopes.includes(item.scope) ? 'bg-cyan-600 text-white border-cyan-500 font-bold' : 'bg-slate-900 text-slate-400 hover:text-slate-200 border-slate-800 hover:border-slate-700'"
+                  class="px-2 py-0.5 rounded-lg border text-[11px] font-mono transition-colors cursor-pointer flex items-center gap-1"
+                  :title="item.description ? `${item.scope} - ${item.description}` : item.scope"
+                >
+                  <span>{{ item.scope }}</span>
+                  <span v-if="item.path" class="text-[9px] opacity-70">({{ item.method || '*' }} {{ item.path }})</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1268,7 +1487,7 @@ function copyRawKey() {
 
     <!-- ─── モーダル: キー設定更新 ────────────────────────────────────── -->
     <div v-if="showEditModal && editingKey" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
           <h3 class="text-base font-bold text-white">API キー設定の更新</h3>
           <button @click="showEditModal = false" class="text-slate-400 hover:text-white cursor-pointer">&times;</button>
@@ -1282,6 +1501,72 @@ function copyRawKey() {
               type="text"
               class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-slate-100 focus:outline-none focus:border-cyan-500"
             />
+          </div>
+
+          <!-- スコープ設定 -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="block font-semibold text-slate-300">許可スコープ (Scopes)</label>
+              <span class="text-[10px] text-slate-400">例: billing:*, billing:admin, billing:read</span>
+            </div>
+
+            <!-- 現在選択中のスコープタグ一覧 -->
+            <div class="min-h-[38px] p-2 bg-slate-950 border border-slate-700 rounded-xl flex flex-wrap items-center gap-1.5 focus-within:border-cyan-500">
+              <span
+                v-for="s in editKeyForm.scopes"
+                :key="s"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-cyan-950/80 border border-cyan-800/80 text-cyan-300 font-mono text-[11px]"
+              >
+                {{ s }}
+                <button
+                  type="button"
+                  @click="removeScopeFromEditKey(s)"
+                  class="text-cyan-400 hover:text-white ml-0.5 cursor-pointer font-bold"
+                >
+                  &times;
+                </button>
+              </span>
+              <span v-if="!editKeyForm.scopes || editKeyForm.scopes.length === 0" class="text-slate-500 text-[11px] italic">
+                スコープが設定されていません (制限なし)
+              </span>
+            </div>
+
+            <!-- スコープ直接追加フォーム -->
+            <div class="flex items-center gap-2">
+              <input
+                v-model="editScopeInput"
+                @keydown.enter.prevent="handleAddEditScope"
+                type="text"
+                placeholder="カスタムスコープを入力して Enter または追加"
+                class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 text-xs font-mono"
+              />
+              <button
+                type="button"
+                @click="handleAddEditScope"
+                class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+              >
+                追加
+              </button>
+            </div>
+
+            <!-- 利用可能なスコープ候補 (サジェスト / チップ) -->
+            <div v-if="availableScopes.length > 0" class="space-y-1 pt-1">
+              <span class="text-[10px] text-slate-400 font-medium">利用可能スコープ (クリックでトグル追加/解除):</span>
+              <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 bg-slate-950/40 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  v-for="item in availableScopes"
+                  :key="item.scope + ':' + (item.path || '')"
+                  @click="toggleScopeInEditKey(item.scope)"
+                  :class="editKeyForm.scopes.includes(item.scope) ? 'bg-cyan-600 text-white border-cyan-500 font-bold' : 'bg-slate-900 text-slate-400 hover:text-slate-200 border-slate-800 hover:border-slate-700'"
+                  class="px-2 py-0.5 rounded-lg border text-[11px] font-mono transition-colors cursor-pointer flex items-center gap-1"
+                  :title="item.description ? `${item.scope} - ${item.description}` : item.scope"
+                >
+                  <span>{{ item.scope }}</span>
+                  <span v-if="item.path" class="text-[9px] opacity-70">({{ item.method || '*' }} {{ item.path }})</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div>

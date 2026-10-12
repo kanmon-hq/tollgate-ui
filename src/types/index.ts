@@ -89,3 +89,20 @@ export interface KeyStats {
   services?: string[]
   tenants?: string[]
 }
+
+export interface PathRule {
+  path: string
+  method?: string
+  scope: string
+  description?: string
+}
+
+export interface ScopeItem {
+  scope: string
+  prefix?: string
+  path?: string
+  method?: string
+  description?: string
+  source?: 'route' | 'path_rule'
+}
+
