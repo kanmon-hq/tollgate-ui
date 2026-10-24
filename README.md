@@ -134,7 +134,7 @@ export function TollgateAdminPage() {
 | `api-base-url` | `string` | Base URL of the Tollgate server (e.g. `http://localhost:8000`, `/api`) | `""` / `VITE_TOLLGATE_API_BASE_URL` |
 | `admin-token` | `string` | Master administrative secret / Bearer token | `""` / `VITE_TOLLGATE_ADMIN_TOKEN` |
 | `tenant-id` | `string` | Restrict console to a specific tenant ID | `""` |
-| `tenants-json` | `string` \| `TenantOption[]` | Array of selectable tenants (or JSON string) | `[]` / `VITE_TOLLGATE_TENANTS` |
+| `tenants-json` | `string` \| `TenantOption[]` | Array of selectable tenants (or JSON string) | `[]` |
 | `embedded` | `boolean` | Hide header banner for cleaner embedded layouts | `false` |
 | `title` | `string` | Header banner title text | `"API Key Gateway (Tollgate) Management Console"` |
 
@@ -148,7 +148,6 @@ When running locally or building default configuration bundles, fallbacks can be
 # Tollgate UI — Environment Variables
 VITE_TOLLGATE_API_BASE_URL=http://localhost:8000
 VITE_TOLLGATE_ADMIN_TOKEN=admin-secret-key-for-local-dev
-VITE_TOLLGATE_TENANTS=[{"id":"tenant-risk-01","name":"Risk Division"},{"id":"tenant-finance-02","name":"Finance Division"}]
 ```
 
 ---

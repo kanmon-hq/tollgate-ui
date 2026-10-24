@@ -120,7 +120,7 @@ export function TollgateAdminPage() {
 | `api-base-url` | `string` | Tollgate サーバーの Base URL (例: `http://localhost:8000`, `/api`) | `""` / `VITE_TOLLGATE_API_BASE_URL` |
 | `admin-token` | `string` | 管理者認可シークレット / Bearer トークン | `""` / `VITE_TOLLGATE_ADMIN_TOKEN` |
 | `tenant-id` | `string` | 特定テナントに限定する場合のテナントID | `""` |
-| `tenants-json` | `string` \| `TenantOption[]` | テナント一覧の配列（またはJSON文字列） | `[]` / `VITE_TOLLGATE_TENANTS` |
+| `tenants-json` | `string` \| `TenantOption[]` | テナント一覧の配列（またはJSON文字列） | `[]` |
 | `embedded` | `boolean` | ヘッダーを非表示にしてコンポーネントのみ埋め込むモード | `false` |
 | `title` | `string` | ヘッダータイトル | `"API Key Gateway (Tollgate) 管理コンソール"` |
 
@@ -132,7 +132,6 @@ export function TollgateAdminPage() {
 # Tollgate UI — Environment Variables
 VITE_TOLLGATE_API_BASE_URL=http://localhost:8000
 VITE_TOLLGATE_ADMIN_TOKEN=admin-secret-key-for-local-dev
-VITE_TOLLGATE_TENANTS=[{"id":"tenant-risk-01","name":"Risk Division"},{"id":"tenant-finance-02","name":"Finance Division"}]
 ```
 
 ## UI 上での動的エンドポイント変更

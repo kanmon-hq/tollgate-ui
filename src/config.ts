@@ -52,9 +52,6 @@ export function getDefaultAdminToken(): string {
  * デフォルトのテナント一覧 (JSON文字列) を取得する
  */
 export function getDefaultTenantsJson(): string {
-  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TOLLGATE_TENANTS) {
-    return import.meta.env.VITE_TOLLGATE_TENANTS
-  }
   if (typeof window !== 'undefined' && window.__TOLLGATE_CONFIG__?.tenantsJson) {
     return window.__TOLLGATE_CONFIG__.tenantsJson
   }

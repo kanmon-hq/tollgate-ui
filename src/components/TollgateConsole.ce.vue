@@ -192,7 +192,7 @@ function resetSettings() {
   refreshAll()
 }
 
-// 明示的設定テナント (Props > 環境変数)
+// 明示的設定テナント (Props / グローバル設定)
 const explicitTenants = computed<TenantOption[]>(() => {
   if (Array.isArray(props.tenantsJson) && props.tenantsJson.length > 0) {
     return props.tenantsJson
